@@ -5,6 +5,7 @@ from torch.utils.data import Dataset, DataLoader
 import requests
 import numpy as np
 import math
+import torch.optim as optim
 
 # --- 0. Szekció: Projekt Előkészítés és Környezet ---
 
@@ -144,6 +145,34 @@ class LLaDAModel(nn.Module):
         logits = self.output_layer(output)
         return logits
 
+# --- 4. Szekció: Tanítási Ciklus és Veszteségfüggvény ---
+
+def compute_llada_loss(logits, targets, mask, t):
+    """
+    Computes the LLaDA loss, weighted by 1/t.
+    """
+    loss_fn = nn.CrossEntropyLoss(reduction='none')
+    # Reshape for CrossEntropyLoss: (N, C, d1, d2, ...), targets (N, d1, d2, ...)
+    # Logits: [batch, seq_len, vocab_size] -> [batch*seq_len, vocab_size]
+    # Targets: [batch, seq_len] -> [batch*seq_len]
+    logits_flat = logits.view(-1, logits.size(-1))
+    targets_flat = targets.view(-1)
+    
+    # Calculate loss for all positions, then filter
+    full_loss = loss_fn(logits_flat, targets_flat)
+    
+    # Reshape mask and filter the loss
+    mask_flat = mask.view(-1)
+    masked_loss = full_loss[mask_flat]
+    
+    # Avoid division by zero if no tokens were masked
+    if masked_loss.numel() == 0:
+        return torch.tensor(0.0, device=logits.device)
+        
+    # Return the mean loss on masked positions, weighted by 1/t
+    return masked_loss.mean() / t
+
+
 if __name__ == '__main__':
     # --- Main execution ---
     setup_environment()
@@ -192,3 +221,17 @@ if __name__ == '__main__':
         print(f"Model output logits shape: {logits.shape}")
         num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print(f"Model parameter count: {num_params:,}")
+
+        # 4. Szekció Ellenőrzés
+        print(f"\n--- Section 4: Training Step Check ---")
+        optimizer = optim.AdamW(model.parameters(), lr=1e-4)
+        
+        # Single training step
+        optimizer.zero_grad()
+        logits = model(masked_seq)
+        loss = compute_llada_loss(logits, sample_batch, _, t_sample)
+        loss.backward()
+        optimizer.step()
+        
+        print(f"Calculated Loss: {loss.item()}")
+        print("Single training step completed successfully.")
