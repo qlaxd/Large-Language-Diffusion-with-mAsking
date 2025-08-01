@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 import requests
 import numpy as np
+import math
 
 # --- 0. Szekció: Projekt Előkészítés és Környezet ---
 
@@ -52,7 +53,7 @@ class SimpleTokenizer:
     def decode(self, ids):
         return "".join([self.id_to_char.get(i, '?') for i in ids])
 
-class ShakespeareDataset(Dataset):
+class ShakespeareDataset:
     """
     PyTorch Dataset for TinyShakespeare sequences.
     """
@@ -104,6 +105,44 @@ def forward_process(sequences, t, mask_token_id):
     masked_sequences = torch.where(binary_mask, mask_token_id, sequences)
     return masked_sequences, binary_mask
 
+# --- 3. Szekció: Modell Architektúra (Mask Predictor) ---
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, d_model, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-math.log(10000.0) / d_model))
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(0)
+        self.register_buffer('pe', pe)
+
+    def forward(self, x):
+        x = x + self.pe[:, :x.size(1)]
+        return x
+
+class LLaDAModel(nn.Module):
+    def __init__(self, vocab_size, embedding_dim, num_heads, num_layers, ff_dim, max_seq_len):
+        super(LLaDAModel, self).__init__()
+        self.embedding_dim = embedding_dim
+        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.pos_encoding = PositionalEncoding(embedding_dim, max_seq_len)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=embedding_dim, 
+            nhead=num_heads, 
+            dim_feedforward=ff_dim, 
+            batch_first=True
+        )
+        self.transformer_encoder = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.output_layer = nn.Linear(embedding_dim, vocab_size)
+
+    def forward(self, src):
+        src = self.embedding(src) * math.sqrt(self.embedding_dim)
+        src = self.pos_encoding(src)
+        output = self.transformer_encoder(src) # No causal mask needed
+        logits = self.output_layer(output)
+        return logits
 
 if __name__ == '__main__':
     # --- Main execution ---
@@ -137,10 +176,19 @@ if __name__ == '__main__':
 
         # Ellenőrzés (2. szekció)
         print(f"\n--- Section 2: Forward Process Check ---")
-        for t_val in [0.1, 0.5, 0.9]:
-            masked_seq, mask = forward_process(sample_batch, t_val, tokenizer.mask_token_id)
-            print(f"\nTesting with t = {t_val}:")
-            print("Masked sequence (decoded):")
-            print(tokenizer.decode(masked_seq[0].tolist()))
-            masked_percentage = (mask.sum() / mask.numel()).item() * 100
-            print(f"Actual masked percentage: {masked_percentage:.2f}%")
+        masked_seq, _ = forward_process(sample_batch, 0.5, tokenizer.mask_token_id)
+
+        # Ellenőrzés (3. szekció)
+        print(f"\n--- Section 3: Model Architecture Check ---")
+        model = LLaDAModel(
+            vocab_size=tokenizer.vocab_size,
+            embedding_dim=256,
+            num_heads=4,
+            num_layers=4,
+            ff_dim=1024,
+            max_seq_len=128
+        )
+        logits = model(masked_seq)
+        print(f"Model output logits shape: {logits.shape}")
+        num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f"Model parameter count: {num_params:,}")
