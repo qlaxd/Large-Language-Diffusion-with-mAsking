@@ -1,4 +1,3 @@
-
 EG_TakeHome_LLaDA.ipynb
 EG_TakeHome_LLaDA.ipynb_
 LLaDA: Large Language Diffusion with mAsking
@@ -21,7 +20,9 @@ Let's dive in!
 ⚠️ Important: We recommend you read the whole notebook before starting your implementation. See the implementation checklist for a comprehensive list of deliverables.
 
 [ ]
+
 # Setup and Imports
+
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import Counter
@@ -29,6 +30,7 @@ import requests
 import random
 
 # Set random seeds for reproducibility
+
 random.seed(42)
 np.random.seed(42)
 
@@ -54,9 +56,10 @@ The model learns to predict original tokens given partially masked sequences.
 
 Key Insight: Unlike autoregressive models, LLaDA can see the entire sequence context (bidirectional) when making predictions!
 
-
 [ ]
+
 # Let's visualize the masking process
+
 def visualize_masking_process():
     """Demonstrate how masking probability increases with time t."""
     sample_text = "To be or not to be, that is the question"
@@ -64,7 +67,7 @@ def visualize_masking_process():
 
     print("LLaDA Forward Process: Gradual Masking")
     print("=" * 50)
-
+    
     for t in [0.0, 0.3, 0.6, 0.9]:
         # Simulate masking for visualization
         masked_tokens = []
@@ -73,11 +76,12 @@ def visualize_masking_process():
                 masked_tokens.append("[MASK]")
             else:
                 masked_tokens.append(token)
-
+    
         masked_text = " ".join(masked_tokens)
         print(f"t = {t:.1f} (≈{int(t*100):2}% masked): {masked_text}")
 
 # Run visualization
+
 visualize_masking_process()
 PART 2: Data Preparation
 Your Task: Set up the TinyShakespeare Dataset
@@ -112,19 +116,20 @@ def download_tinyshakespeare():
         print("Downloading TinyShakespeare dataset...")
         response = requests.get(url)
         response.raise_for_status()
-
+    
         with open('tinyshakespeare.txt', 'w', encoding='utf-8') as f:
             f.write(response.text)
-
+    
         print("Download complete!")
         return response.text
-
+    
     except Exception as e:
         print(f"Download failed: {e}")
         print("Try downloading manually from:", url)
         return None
 
 # Download the dataset
+
 raw_text = download_tinyshakespeare()
 
 if raw_text:
@@ -136,6 +141,7 @@ else:
 Tokenization Implementation
 
 [ ]
+
 # @title Tokenization Implementation
 
 class SimpleTokenizer:
@@ -145,7 +151,7 @@ class SimpleTokenizer:
     Creates a vocabulary from unique characters in the text and adds special tokens.
     Feel free to replace this implemetnation with your own.
     """
-
+    
     def __init__(self, text):
         """Initialize tokenizer with text corpus."""
         # Special tokens
@@ -155,37 +161,37 @@ class SimpleTokenizer:
             '[START]': 2,
             '[END]': 3
         }
-
+    
         # Get unique characters from text
         unique_chars = sorted(list(set(text)))
-
+    
         # Create vocabulary: special tokens + characters
         self.char_to_id = self.special_tokens.copy()
         for i, char in enumerate(unique_chars):
             self.char_to_id[char] = len(self.special_tokens) + i
-
+    
         # Create reverse mapping
         self.id_to_char = {v: k for k, v in self.char_to_id.items()}
-
+    
         # Store vocabulary info
         self.vocab_size = len(self.char_to_id)
         self.pad_token_id = self.special_tokens['[PAD]']
         self.mask_token_id = self.special_tokens['[MASK]']
         self.start_token_id = self.special_tokens['[START]']
         self.end_token_id = self.special_tokens['[END]']
-
+    
         print(f"Vocabulary created: {self.vocab_size} tokens")
         print(f"Special tokens: {list(self.special_tokens.keys())}")
         print(f"Character range: '{min(unique_chars)}' to '{max(unique_chars)}'")
-
+    
     def encode(self, text):
         """Convert text to list of token IDs."""
         return [self.char_to_id.get(char, self.mask_token_id) for char in text]
-
+    
     def decode(self, token_ids):
         """Convert list of token IDs back to text."""
         return ''.join([self.id_to_char.get(token_id, '[UNK]') for token_id in token_ids])
-
+    
     def encode_with_special_tokens(self, text, add_start=True, add_end=True):
         """Encode text with start/end tokens."""
         tokens = []
@@ -197,6 +203,7 @@ class SimpleTokenizer:
         return tokens
 
 # Initialize tokenizer and create datasets
+
 if raw_text:
     tokenizer = SimpleTokenizer(raw_text)
 
@@ -204,19 +211,21 @@ if raw_text:
     sample_text = "Hello world!"
     encoded = tokenizer.encode(sample_text)
     decoded = tokenizer.decode(encoded)
-
+    
     print(f"\nTokenization test:")
     print(f"Original: '{sample_text}'")
     print(f"Encoded:  {encoded}")
     print(f"Decoded:  '{decoded}'")
-
+    
     # Test special tokens
     special_test = tokenizer.encode_with_special_tokens("Hi!")
     special_decoded = tokenizer.decode(special_test)
     print(f"With special tokens: {special_test} -> '{special_decoded}'")
+
 Dataset Creation
 
 [ ]
+
 # @title Dataset Creation
 
 class ShakespeareDataset:
@@ -225,11 +234,11 @@ class ShakespeareDataset:
 
     Creates fixed-length sequences from the text corpus with padding.
     """
-
+    
     def __init__(self, text, tokenizer, seq_length=128, stride=None):
         """
         Initialize dataset.
-
+    
         Args:
             text: Raw text string
             tokenizer: SimpleTokenizer instance
@@ -239,39 +248,39 @@ class ShakespeareDataset:
         self.tokenizer = tokenizer
         self.seq_length = seq_length
         self.stride = stride or seq_length
-
+    
         # Tokenize the entire text
         self.token_ids = tokenizer.encode(text)
-
+    
         # Create sequences
         self.sequences = []
         for i in range(0, len(self.token_ids) - seq_length + 1, self.stride):
             sequence = self.token_ids[i:i + seq_length]
             self.sequences.append(sequence)
-
+    
         print(f"Created {len(self.sequences):,} sequences of length {seq_length}")
-
+    
         # Store some statistics
         self.num_tokens = len(self.token_ids)
         self.num_sequences = len(self.sequences)
-
+    
     def __len__(self):
         """Return number of sequences in dataset."""
         return len(self.sequences)
-
+    
     def __getitem__(self, idx):
         """Get sequence by index."""
         return self.sequences[idx]
-
+    
     def get_batch(self, indices):
         """Get multiple sequences as a batch."""
         return [self.sequences[i] for i in indices]
-
+    
     def sample_batch(self, batch_size):
         """Sample random batch of sequences."""
         indices = random.sample(range(len(self.sequences)), batch_size)
         return self.get_batch(indices)
-
+    
     def get_stats(self):
         """Return dataset statistics."""
         return {
@@ -282,8 +291,8 @@ class ShakespeareDataset:
             'coverage': self.num_sequences * self.seq_length / self.num_tokens
         }
 
-
 # Create train/validation split
+
 if raw_text:
     # Split text (80/20)
     split_idx = int(0.8 * len(raw_text))
@@ -293,19 +302,19 @@ if raw_text:
     # Create datasets with some overlap for validation
     train_dataset = ShakespeareDataset(train_text, tokenizer, seq_length=128, stride=128)
     val_dataset = ShakespeareDataset(val_text, tokenizer, seq_length=128, stride=64)
-
+    
     print(f"\nDataset Statistics:")
     print(f"Vocabulary size: {tokenizer.vocab_size}")
     print(f"Training sequences: {len(train_dataset):,}")
     print(f"Validation sequences: {len(val_dataset):,}")
-
+    
     # Display detailed stats
     train_stats = train_dataset.get_stats()
     val_stats = val_dataset.get_stats()
-
+    
     print(f"\nTraining set coverage: {train_stats['coverage']:.1%}")
     print(f"Validation set coverage: {val_stats['coverage']:.1%}")
-
+    
     # Show sample sequences
     print(f"\nSample training sequence:")
     sample_seq = train_dataset[0]
@@ -313,7 +322,7 @@ if raw_text:
     print(f"Length: {len(sample_seq)}")
     print(f"Tokens: {sample_seq[:20]}...")
     print(f"Text: '{sample_text[:100]}...'")
-
+    
     # Show batch sampling
     print(f"\nBatch sampling test:")
     batch = train_dataset.sample_batch(3)
@@ -321,6 +330,7 @@ if raw_text:
     for i, seq in enumerate(batch):
         text_preview = tokenizer.decode(seq[:50])
         print(f"  Sequence {i}: '{text_preview}...'")
+
 PART 3: The Forward Process - Gradually Masking Text
 Understanding the Forward Process
 In LLaDA, the forward process gradually masks tokens:
@@ -346,6 +356,7 @@ Return both the masked sequence and a mask indicating which positions were maske
 Forward Process Implementation
 
 [ ]
+
 # @title Forward Process Implementation
 
 def forward_process(sequences, t, mask_token_id):
@@ -354,11 +365,12 @@ def forward_process(sequences, t, mask_token_id):
 
     YOUR TASK: Complete this implementation, or create your own.
     """
-
+    
     # TODO: Implement the forward masking process
     # Hint: For each token, mask with probability t
-
+    
     pass
+
 PART 4: Model Architecture - The Mask Predictor
 Understanding the Architecture
 The core of LLaDA is a Transformer that predicts masked tokens.
@@ -386,12 +398,14 @@ Critical Implementation Note: Make sure your attention mechanism can see the ful
 Model Implementation
 
 [ ]
+
 # @title Model Implementation
 
 """
 YOUR TASK: Implement the Mask Predictor architecture.
 
 Key requirements:
+
 - Bidirectional attention (no causal masking!)
 - Input: sequences with masked tokens
 - Output: predictions for all positions
@@ -419,17 +433,19 @@ compute_loss(model, clean_sequences, t, mask_token_id):
 
     # Get model predictions
     logits = model(masked_sequences)
-
+    
     # Compute cross-entropy loss only on masked positions
     loss = cross_entropy(logits[mask], clean_sequences[mask])
-
+    
     # Weight by 1/t
     weighted_loss = loss / t
-
+    
     return weighted_loss
+
 Loss Function Implementation
 
 [ ]
+
 # @title Loss Function Implementation
 
 def compute_llada_loss(model, sequences, t, tokenizer):
@@ -437,13 +453,14 @@ def compute_llada_loss(model, sequences, t, tokenizer):
     Compute the LLaDA training loss.
 
     Loss formula: L(θ) = -E[1/t * Σ 1[x_i_t = MASK] * log p_θ(x_i_0 | x_t)]
-
+    
     YOUR TASK: Complete this implementation for your chosen framework.
     """
-
+    
     # TODO: Implement loss computation
-
+    
     pass
+
 PART 6: Training Loop
 Your Task: Train the LLaDA Model
 Training Procedure:
@@ -467,6 +484,7 @@ Final trained model
 Training Implementation
 
 [ ]
+
 # @title Training Implementation
 
 def train_llada_model(model, train_dataset, val_dataset, tokenizer, num_epochs=10, batch_size=32):
@@ -475,11 +493,11 @@ def train_llada_model(model, train_dataset, val_dataset, tokenizer, num_epochs=1
 
     YOUR TASK: Complete this training loop for your framework or replace it completely.
     """
-
+    
     print(f"Starting training: {num_epochs} epochs, batch size {batch_size}")
-
+    
     # TODO: Set up optimizer, training state, etc...
-
+    
     # Training history
     history = {
         'train_loss': [],
@@ -487,11 +505,12 @@ def train_llada_model(model, train_dataset, val_dataset, tokenizer, num_epochs=1
         'train_acc': [],
         'val_acc': []
     }
-
+    
     for epoch in range(num_epochs):
         print(f"\nEpoch {epoch+1}/{num_epochs}")
-
+    
         # TODO: forward, backward, update, logs, checkpointing
+
 PART 7: Inference - The Reverse Process
 Understanding Text Generation
 To generate text with LLaDA:
@@ -512,19 +531,20 @@ generate_text(model, prompt, max_length, num_steps):
         # Compute time steps
         t = (num_steps - step) / num_steps  # Goes from 1 to 0
         s = (num_steps - step - 1) / num_steps
-
+    
         # Predict masked tokens
         logits = model(sequence)
         predicted_tokens = sample_from_logits(logits)  # Use sampling or argmax
-
+    
         # Update sequence with predictions
         sequence[masked_positions] = predicted_tokens[masked_positions]
-
+    
         # Remask some tokens for next iteration
         fraction_to_remask = s / t
         randomly_remask(sequence, fraction_to_remask)
-
+    
     return sequence
+
 Implementation Notes:
 
 You can use greedy decoding (argmax) or sampling
@@ -533,6 +553,7 @@ Experiment with different numbers of sampling steps
 Reverse Process Implementation
 
 [ ]
+
 # @title Reverse Process Implementation
 
 def reverse_process_generate(model, prompt, max_length, num_steps, tokenizer):
@@ -541,12 +562,13 @@ def reverse_process_generate(model, prompt, max_length, num_steps, tokenizer):
 
     YOUR TASK: Implement the reverse sampling process.
     """
-
+    
     print(f"Generating text: prompt='{prompt}', length={max_length}, steps={num_steps}")
-
+    
     # TODO: Implement reverse process sampling
-
+    
     pass
+
 PART 8: Experiments and Evaluation
 Your Task: Analyze model performance
 Quantitative Metrics:
