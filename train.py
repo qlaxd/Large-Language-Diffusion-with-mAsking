@@ -85,7 +85,7 @@ def compute_autoregressive_loss(logits, targets):
     Computes the standard cross-entropy loss for an autoregressive model.
     """
     loss_fn = torch.nn.CrossEntropyLoss()
-    return loss_fn(logits.view(-1, logits.size(-1)), targets.view(-1))
+    return loss_fn(logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
 
 # --- Plotting ---
 def plot_loss_curves(history, model_type):
