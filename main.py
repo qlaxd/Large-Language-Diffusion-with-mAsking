@@ -8,7 +8,7 @@ project, such as training models or generating text.
 import argparse
 
 from train import run_training
-# from generate import run_generation
+from generate import run_generation
 
 def main():
     """

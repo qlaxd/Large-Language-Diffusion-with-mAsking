@@ -36,3 +36,5 @@ build/
 *.coverage.txt
 *.coverage.xml
 *.coverage.*
+
+wandb/
