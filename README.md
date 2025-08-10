@@ -1,98 +1,89 @@
 # LLaDA: Large Language Diffusion with mAsking
 
-This project provides a PyTorch implementation of **LLaDA (Large Language Diffusion with mAsking)**, a non-autoregressive language model that uses a diffusion-like masking process to generate text. The project also includes a standard **autoregressive (GPT-like) baseline model** for comparison. Both models are trained on the TinyShakespeare dataset.
+This project is an implementation of a character-level diffusion model (LLaDA) for text generation, based on the principles outlined in the take-home exercise. It also includes a standard autoregressive Transformer model as a baseline for comparison.
 
-The implementation follows the detailed plan outlined in `TASK.md` and has been refactored into a modular, script-based structure for clarity and ease of use.
-
-## Features
-
-- **LLaDA Model**: A bidirectional Transformer that learns to predict masked tokens in a sequence.
-- **Autoregressive Model**: A standard causal Transformer baseline.
-- **Modular Codebase**: The logic is separated into distinct modules for data handling, model architecture, training, and generation.
-- **Centralized Configuration**: All hyperparameters and file paths are managed in a single configuration file.
-- **Training & Validation**: Complete training and validation loops for both models.
-- **Checkpointing**: Automatically saves the best performing model based on validation loss.
-- **Result Visualization**: Generates and saves loss curves for each training run.
+The entire project has been refactored from a monolithic script into a modular, clean, and testable structure that supports training and inference from the command line and tracks experiments using Weights & Biases.
 
 ## Project Structure
 
 ```
 /
-├── configs/
-│   └── base_config.py      # Central configuration for hyperparameters and paths
-├── data/
-│   └── tinyshakespeare.txt # The dataset (downloaded automatically)
-├── outputs/
-│   ├── models/             # Saved model checkpoints (.pth)
-│   └── plots/              # Saved loss curves (.png)
-├── tests/
-│   ├── test_data_utils.py  # Tests for data utilities
-│   └── test_model.py       # Tests for model architectures
+├── configs/            # Centralized configuration files
+├── data/               # Raw data files (e.g., tinyshakespeare.txt)
+├── outputs/            # Saved models (.pth) and plots (.png)
+├── tests/              # Unit tests for the project
 ├── .gitignore
-├── data_utils.py           # Data loading and tokenization logic
-├── model.py                # LLaDA and Autoregressive model architectures
-├── train.py                # Training and validation loops
-├── generate.py             # Text generation logic (inference)
-├── main.py                 # Main entry point to run training or generation
-├── README.md               # This file
-└── requirements.txt        # Python dependencies
+├── data_utils.py       # Tokenizer and PyTorch Dataset classes
+├── model.py            # Model architectures (LLaDA and Autoregressive)
+├── train.py            # Training script with wandb integration
+├── generate.py         # Inference script for text generation
+├── main.py             # Main entry point for the CLI
+├── README.md           # This file
+├── requirements.txt    # Python dependencies
+└── EVALUATION_REPORT.md # Analysis of the model performance
 ```
 
-## Setup and Installation
+## Setup
 
 1.  **Clone the repository:**
     ```bash
-    git clone <repository-url>
-    cd <repository-directory>
+    git clone <repository_url>
+    cd <repository_directory>
     ```
 
-2.  **Create and activate a Python virtual environment:**
+2.  **Create a virtual environment:**
     ```bash
-    python -m venv .venv
+    python3 -m venv .venv
     source .venv/bin/activate
     ```
 
-3.  **Install the required dependencies:**
+3.  **Install dependencies:**
     ```bash
     pip install -r requirements.txt
     ```
-    The first time you run the training, the script will automatically download the TinyShakespeare dataset into the `data/` directory.
+
+4.  **(Optional but Recommended) Login to Weights & Biases:**
+    To enable experiment tracking, log in to your W&B account. You will be prompted for your API key.
+    ```bash
+    wandb login
+    ```
 
 ## Usage
 
-The project is controlled via the `main.py` script, which takes command-line arguments to specify the desired mode and model type.
+The project is controlled via the `main.py` script with command-line arguments.
 
 ### Training
 
-To train a model, use the `--mode train` argument.
+To train a model, use the `--mode train` argument and specify the model type.
+The script will download the dataset, train the model, save the best version to `outputs/models/`, and log the experiment to Weights & Biases.
 
--   **Train the LLaDA model:**
-    ```bash
-    python main.py --mode train --model_type llada
-    ```
+**Train the LLaDA model:**
+```bash
+python3 main.py --mode train --model_type llada
+```
 
--   **Train the Autoregressive baseline model:**
-    ```bash
-    python main.py --mode train --model_type autoregressive
-    ```
+**Train the Autoregressive model:**
+```bash
+python3 main.py --mode train --model_type autoregressive
+```
 
-Training progress will be displayed in the console. The best model checkpoints will be saved to `outputs/models/`, and loss curves will be saved to `outputs/plots/`.
+### Generation
 
-### Text Generation
+To generate text with a trained model, use the `--mode generate` argument. The script will automatically load the best saved model weights.
 
-To generate text from a trained model, use the `--mode generate` argument.
+**Generate with the LLaDA model:**
+```bash
+python3 main.py --mode generate --model_type llada --prompt "O Romeo, Romeo!"
+```
 
--   **Generate text with the LLaDA model:**
-    ```bash
-    python main.py --mode generate --model_type llada --prompt "To be, or not to be"
-    ```
+**Generate with the Autoregressive model:**
+```bash
+python3 main.py --mode generate --model_type autoregressive --prompt "O Romeo, Romeo!"
+```
 
--   **Generate text with the Autoregressive model:**
-    ```bash
-    python main.py --mode generate --model_type autoregressive --prompt "JULIET:"
-    ```
-    *(Note: The generation script `generate.py` is not yet fully implemented.)*
+### Running Tests
 
-### Configuration
-
-All hyperparameters (e.g., `BATCH_SIZE`, `LEARNING_RATE`, `EMBEDDING_DIM`), file paths, and training settings can be easily modified in the `configs/base_config.py` file.
+To ensure all components are working correctly, run the unit tests:
+```bash
+python3 -m unittest discover tests
+```
