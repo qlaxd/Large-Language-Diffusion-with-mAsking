@@ -10,6 +10,8 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import os
 import matplotlib.pyplot as plt
+import time
+import wandb
 
 # Import from our new modular structure
 from configs import base_config
@@ -69,7 +71,6 @@ def compute_llada_loss(logits, targets, mask, t):
     Computes the LLaDA loss, weighted by 1/t, only on masked positions.
     """
     loss_fn = torch.nn.CrossEntropyLoss(reduction='none')
-    # Flatten logits and targets to (batch*seq_len, vocab_size) and (batch*seq_len)
     loss = loss_fn(logits.view(-1, logits.size(-1)), targets.view(-1))
     
     mask_flat = mask.view(-1)
@@ -101,7 +102,6 @@ def plot_loss_curves(history, model_type):
     plt.legend()
     plt.grid(True)
     
-    # Ensure plot directory exists
     os.makedirs(base_config.PLOT_DIR, exist_ok=True)
     save_path = os.path.join(base_config.PLOT_DIR, f"{model_type}_loss_curves.png")
     
@@ -112,11 +112,16 @@ def plot_loss_curves(history, model_type):
 # --- Main Training Function ---
 def run_training(model_type):
     """
-    Main training and validation loop. Handles both LLaDA and autoregressive models.
+    Main training and validation loop with wandb integration.
     """
     # --- Setup ---
     device = torch.device(base_config.DEVICE)
+    config_dict = {k: v for k, v in base_config.__dict__.items() if k.isupper()}
+
+    run_name = f"{model_type}_{time.strftime('%Y%m%d-%H%M%S')}"
+    wandb.init(project="LLaDA-Take-Home", name=run_name, config=config_dict)
     print(f"Using device: {device}")
+    print(f"Wandb run initialized: {run_name}")
 
     # --- Data ---
     if not os.path.exists(base_config.TINYSHAKESPEARE_PATH):
@@ -126,25 +131,23 @@ def run_training(model_type):
             raw_text = f.read()
 
     tokenizer = SimpleTokenizer(raw_text)
-    # This is a bit of a hack; ideally, vocab size would be saved/loaded
-    # or passed more cleanly. For this project, it's acceptable.
-    base_config.VOCAB_SIZE = tokenizer.vocab_size
-    print(f"Vocabulary size: {tokenizer.vocab_size}")
+    wandb.config.update({"vocab_size": tokenizer.vocab_size})
     train_loader, val_loader = create_data_loaders(tokenizer)
 
     # --- Model ---
     if model_type == 'llada':
-        model = LLaDAModel(base_config)
+        model = LLaDAModel(wandb.config)
     else:
-        model = AutoregressiveModel(base_config)
+        model = AutoregressiveModel(wandb.config)
     model.to(device)
+    wandb.watch(model, log='all', log_freq=100)
     
-    optimizer = optim.AdamW(model.parameters(), lr=base_config.LEARNING_RATE)
+    optimizer = optim.AdamW(model.parameters(), lr=wandb.config.LEARNING_RATE)
     history = {'train_loss': [], 'val_loss': []}
     best_val_loss = float('inf')
 
     print(f"\n--- Starting Training for {model_type.upper()} Model ---")
-    for epoch in range(base_config.NUM_EPOCHS):
+    for epoch in range(wandb.config.NUM_EPOCHS):
         # --- Training Phase ---
         model.train()
         total_train_loss = 0
@@ -158,7 +161,6 @@ def run_training(model_type):
                 logits = model(masked_seq)
                 loss = compute_llada_loss(logits, batch, mask, t)
             else: # autoregressive
-                # For autoregressive, target is the input shifted by one
                 inputs = batch[:, :-1]
                 targets = batch[:, 1:]
                 logits = model(inputs)
@@ -178,7 +180,7 @@ def run_training(model_type):
             for batch in val_loader:
                 batch = batch.to(device)
                 if model_type == 'llada':
-                    t = 0.5 # Use a fixed t for consistent validation
+                    t = 0.5
                     masked_seq, mask = forward_process(batch, t, tokenizer.mask_token_id)
                     logits = model(masked_seq)
                     loss = compute_llada_loss(logits, batch, mask, t)
@@ -192,7 +194,8 @@ def run_training(model_type):
         avg_val_loss = total_val_loss / len(val_loader)
         history['val_loss'].append(avg_val_loss)
 
-        print(f"Epoch {epoch+1:02d}/{base_config.NUM_EPOCHS} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+        print(f"Epoch {epoch+1:02d}/{wandb.config.NUM_EPOCHS} | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+        wandb.log({"train_loss": avg_train_loss, "val_loss": avg_val_loss, "epoch": epoch + 1})
 
         # --- Checkpointing ---
         if avg_val_loss < best_val_loss:
@@ -201,7 +204,11 @@ def run_training(model_type):
             save_path = os.path.join(base_config.MODEL_DIR, f"{model_type}_model_best.pth")
             torch.save(model.state_dict(), save_path)
             print(f"  -> Model improved. Saved to {save_path}")
+            wandb.run.summary["best_val_loss"] = best_val_loss
 
     # --- Finalization ---
     plot_loss_curves(history, model_type)
+    # Log the plot to wandb
+    wandb.log({"loss_curves": wandb.Image(os.path.join(base_config.PLOT_DIR, f"{model_type}_loss_curves.png"))})
     print(f"--- Finished Training for {model_type.upper()} Model ---")
+    wandb.finish()
