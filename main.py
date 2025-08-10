@@ -7,8 +7,7 @@ project, such as training models or generating text.
 
 import argparse
 
-# We will import the actual functions in later phases
-# from train import run_training
+from train import run_training
 # from generate import run_generation
 
 def main():
@@ -45,10 +44,7 @@ def main():
     print(f"--- Running in {args.mode.upper()} mode for {args.model_type.upper()} model ---")
 
     if args.mode == 'train':
-        # In a later phase, this will call the training function
-        # run_training(model_type=args.model_type)
-        print("Training logic to be implemented in Phase 1.")
-        pass
+        run_training(model_type=args.model_type)
     elif args.mode == 'generate':
         # In a later phase, this will call the generation function
         # run_generation(model_type=args.model_type, prompt=args.prompt)
