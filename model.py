@@ -45,7 +45,7 @@ class LLaDAModel(nn.Module):
         super(LLaDAModel, self).__init__()
         self.embedding_dim = config.EMBEDDING_DIM
         self.embedding = nn.Embedding(config.VOCAB_SIZE, config.EMBEDDING_DIM)
-        self.pos_encoding = PositionalEncoding(config.EMBEDDING_DIM, dropout=config.DROPOUT, max_len=config.SEQ_LENGTH + 1)
+        self.pos_encoding = PositionalEncoding(config.EMBEDDING_DIM, dropout=config.DROPOUT, max_len=5000)
         
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=config.EMBEDDING_DIM, 
@@ -82,7 +82,7 @@ class AutoregressiveModel(nn.Module):
         super(AutoregressiveModel, self).__init__()
         self.embedding_dim = config.EMBEDDING_DIM
         self.embedding = nn.Embedding(config.VOCAB_SIZE, config.EMBEDDING_DIM)
-        self.pos_encoding = PositionalEncoding(config.EMBEDDING_DIM, dropout=config.DROPOUT, max_len=config.SEQ_LENGTH + 1)
+        self.pos_encoding = PositionalEncoding(config.EMBEDDING_DIM, dropout=config.DROPOUT, max_len=5000)
 
         # Using a standard TransformerEncoder with a causal mask is common and efficient
         encoder_layer = nn.TransformerEncoderLayer(
