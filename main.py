@@ -46,9 +46,7 @@ def main():
     if args.mode == 'train':
         run_training(model_type=args.model_type)
     elif args.mode == 'generate':
-        # In a later phase, this will call the generation function
-        # run_generation(model_type=args.model_type, prompt=args.prompt)
-        print("Generation logic to be implemented in Phase 3.")
+        run_generation(model_type=args.model_type, prompt=args.prompt)
         pass
 
 if __name__ == '__main__':
