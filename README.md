@@ -4,6 +4,8 @@ This project is an implementation of a character-level diffusion model (LLaDA) f
 
 The entire project has been refactored from a monolithic script into a modular, clean, and testable structure that supports training and inference from the command line and tracks experiments using Weights & Biases.
 
+[The research paper](https://openreview.net/pdf?id=wzl61tIUj6)
+
 ## Project Structure
 
 ```
